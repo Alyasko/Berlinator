@@ -1,10 +1,10 @@
-﻿using System;
+﻿using Berlinator.Console.Utils;
+using OpenQA.Selenium;
+using Serilog;
+using System;
 using System.Linq;
 using System.Threading;
 using System.Timers;
-using Berlinator.Console.Utils;
-using OpenQA.Selenium;
-using Serilog;
 using Timer = System.Timers.Timer;
 
 namespace Berlinator.Console.Core
@@ -17,19 +17,42 @@ namespace Berlinator.Console.Core
         public BerMonitor(IWebDriver driver)
         {
             _driver = driver;
-            _timer = new Timer(10000) {AutoReset = true, Enabled = false};
+            _timer = new Timer(5 * 60 * 1000) {AutoReset = true, Enabled = false};
             _timer.Elapsed += TimerOnElapsed;
         }
+
+        public event EventHandler<FoundTerminEventArgs>? TerminFoundEventHandler;
+
+        public event EventHandler<EventArgs>? TerminCalendarPageCorruptedEventHandler;
 
         private void TimerOnElapsed(object sender, ElapsedEventArgs e)
         {
             Log.Information("Refreshing page.");
             _driver.Navigate().Refresh();
 
-            var buched = _driver.FindElements(By.CssSelector("td.buchbar")).FirstOrDefault();
-            if (buched != null)
+            var head = _driver.FindElements(By.CssSelector(".calendar-head .title"));
+
+            if (head == null || head.Count == 0 || !head.First().Text
+                    .Contains("Bitte wählen Sie ein Datum", StringComparison.OrdinalIgnoreCase))
             {
-                Log.Fatal("FOUND");
+                TerminCalendarPageCorruptedEventHandler?.Invoke(this, EventArgs.Empty);
+                Log.Fatal("Page is corrupted");
+                return;
+            }
+
+            var buchbar = _driver.FindElements(By.CssSelector("td.buchbar")).FirstOrDefault();
+
+            if (buchbar != null)
+            {
+                var utcFound = DateTime.MinValue;
+
+                TerminFoundEventHandler?.Invoke(this, new FoundTerminEventArgs()
+                {
+                    UtcFreeTermin = utcFound,
+                    Payload = buchbar.Text
+                });
+
+                Log.Fatal($"Found termin at {utcFound.ToShortDateString()}");
             }
         }
 
@@ -61,12 +84,6 @@ namespace Berlinator.Console.Core
                     "Please make sure that you went to this page 'https://service.berlin.de/terminvereinbarung/termin/day/', then try again.");
                 return;
             }
-
-            //Log.Information($"Pages to navigate:{Environment.NewLine}{urlBegin}{Environment.NewLine}{urlNexPage}");
-
-            //_driver.FindElements(By.CssSelector(".controll .next")).FirstOrDefault();
-
-            //_driver.FindElements(By.CssSelector(".control>.next")).FirstOrDefault()?.Click();
 
             _timer.Start();
         }

@@ -11,6 +11,7 @@ namespace Berlinator.Console.Core
         private readonly IWebDriver _driver;
         private readonly BerMonitor _berMonitor;
         private readonly BerConfig _berConfig;
+        private readonly BerAlarm _berAlarm;
 
         public BerApp(BerConfig berConfig)
         {
@@ -24,6 +25,7 @@ namespace Berlinator.Console.Core
                 Log.Warning("Configuration is empty.");
 
             _berConfig = berConfig;
+            _berAlarm = new BerAlarm(berConfig);
 
             var service = ChromeDriverService.CreateDefaultService();
             service.SuppressInitialDiagnosticInformation = false;
@@ -32,13 +34,24 @@ namespace Berlinator.Console.Core
             _driver = new ChromeDriver(service);
 
             _berMonitor = new BerMonitor(_driver);
+
+            _berMonitor.TerminFoundEventHandler += BerMonitorOnTerminFoundEventHandler;
+            _berMonitor.TerminCalendarPageCorruptedEventHandler += BerMonitorOnTerminCalendarPageCorruptedEventHandler;
+        }
+
+        private async void BerMonitorOnTerminCalendarPageCorruptedEventHandler(object? sender, EventArgs e)
+        {
+            await _berAlarm.PageCorrupted();
+        }
+
+        private async void BerMonitorOnTerminFoundEventHandler(object? sender, FoundTerminEventArgs e)
+        {
+            await _berAlarm.Alarm(_berConfig.StartUrl, e.UtcFreeTermin, e.Payload);
         }
 
         public Task Run()
         {
-            //_driver.Url = "https://service.berlin.de/";
-            _driver.Url = "https://service.berlin.de/dienstleistung/327537/";
-            _driver.Navigate();
+            _driver.Navigate().GoToUrl(_berConfig.StartUrl);
 
             return Task.CompletedTask;
         }

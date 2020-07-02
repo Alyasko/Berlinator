@@ -6,6 +6,8 @@ namespace Berlinator.Console.Core
     public class BerConfig
     {
         public string TelegramToken { get; set; } = string.Empty;
+        public string ChatId { get; set; } = string.Empty;
+        public string StartUrl { get; set; } = string.Empty;
 
         public static readonly BerConfig Empty = new BerConfig();
 
