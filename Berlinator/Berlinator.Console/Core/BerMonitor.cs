@@ -2,6 +2,8 @@
 using OpenQA.Selenium;
 using Serilog;
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Timers;
@@ -13,19 +15,22 @@ namespace Berlinator.Console.Core
     {
         private readonly IWebDriver _driver;
         private readonly Timer _timer;
+        private readonly IMessageAlarmSender _messageAlarm;
 
-        public BerMonitor(IWebDriver driver)
+        public BerMonitor(IWebDriver driver, IMessageAlarmSender messageAlarm)
         {
             _driver = driver;
-            _timer = new Timer(5 * 60 * 1000) {AutoReset = true, Enabled = false};
+            _messageAlarm = messageAlarm;
+            //_timer = new Timer(1 * 60 * 1000) {AutoReset = true, Enabled = false};
+            _timer = new Timer(10000) {AutoReset = false, Enabled = false};
             _timer.Elapsed += TimerOnElapsed;
         }
 
-        public event EventHandler<FoundTerminEventArgs>? TerminFoundEventHandler;
+        public event EventHandler<FoundTerminEventArgs>? TerminsFoundEventHandler;
 
         public event EventHandler<EventArgs>? TerminCalendarPageCorruptedEventHandler;
 
-        private void TimerOnElapsed(object sender, ElapsedEventArgs e)
+        private void TimerOnElapsed(object sender, ElapsedEventArgs? e)
         {
             Log.Information("Refreshing page.");
             _driver.Navigate().Refresh();
@@ -40,20 +45,43 @@ namespace Berlinator.Console.Core
                 return;
             }
 
-            var buchbar = _driver.FindElements(By.CssSelector("td.buchbar")).FirstOrDefault();
+            var calendars = _driver.FindElements(By.CssSelector("div.calendar-month-table")).ToList();
 
-            if (buchbar != null)
+            var times = new List<DateTime>();
+
+            foreach (var calendar in calendars)
             {
-                var utcFound = DateTime.MinValue;
-
-                TerminFoundEventHandler?.Invoke(this, new FoundTerminEventArgs()
+                var month = "[null]";
+                var thead = calendar.FindElements(By.CssSelector("thead .month")).FirstOrDefault();
+                if (thead != null)
                 {
-                    UtcFreeTermin = utcFound,
-                    Payload = buchbar.Text
-                });
+                    month = thead.Text;
+                }
 
-                Log.Fatal($"Found termin at {utcFound.ToShortDateString()}");
+                var buchbars = calendar.FindElements(By.CssSelector("td.nichtbuchbar")).ToList();
+                buchbars.ForEach(x =>
+                {
+                    var dt = DateTime.MinValue;
+                    var dtString = $"{x.Text} {month}";
+                    if (DateTime.TryParse(dtString, CultureInfo.GetCultureInfo("de"), DateTimeStyles.None, out var dtP))
+                        dt = dtP;
+
+                    times.Add(dt);
+                });
             }
+
+            if (times.Count > 0)
+            {
+                TerminsFoundEventHandler?.Invoke(this, new FoundTerminEventArgs()
+                {
+                    TerminTimes = times,
+                });
+                _messageAlarm.SendMessage("");
+
+                Log.Fatal($"Found termin(s) at {string.Join(", ", times)}");
+            }
+
+            _timer.Start();
         }
 
         public void StartMonitoring()
@@ -85,7 +113,7 @@ namespace Berlinator.Console.Core
                 return;
             }
 
-            _timer.Start();
+            TimerOnElapsed(this, null);
         }
 
         public void StopMonitoring()

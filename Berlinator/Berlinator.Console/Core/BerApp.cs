@@ -33,9 +33,9 @@ namespace Berlinator.Console.Core
             service.EnableVerboseLogging = false;
             _driver = new ChromeDriver(service);
 
-            _berMonitor = new BerMonitor(_driver);
+            _berMonitor = new BerMonitor(_driver, _berAlarm);
 
-            _berMonitor.TerminFoundEventHandler += BerMonitorOnTerminFoundEventHandler;
+            _berMonitor.TerminsFoundEventHandler += BerMonitorOnTerminsFoundEventHandler;
             _berMonitor.TerminCalendarPageCorruptedEventHandler += BerMonitorOnTerminCalendarPageCorruptedEventHandler;
         }
 
@@ -44,9 +44,9 @@ namespace Berlinator.Console.Core
             await _berAlarm.PageCorrupted();
         }
 
-        private async void BerMonitorOnTerminFoundEventHandler(object? sender, FoundTerminEventArgs e)
+        private async void BerMonitorOnTerminsFoundEventHandler(object? sender, FoundTerminEventArgs e)
         {
-            await _berAlarm.Alarm(_berConfig.StartUrl, e.UtcFreeTermin, e.Payload);
+            await _berAlarm.Alarm(_berConfig.StartUrl, e.TerminTimes, e.Payload);
         }
 
         public Task Run()

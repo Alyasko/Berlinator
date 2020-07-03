@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Berlinator.Console.Core
 {
     public class FoundTerminEventArgs : EventArgs
     {
-        public DateTime UtcFreeTermin { get; set; }
+        public List<DateTime> TerminTimes { get; set; } = new List<DateTime>();
 
         public string Payload { get; set; } = string.Empty;
     }
